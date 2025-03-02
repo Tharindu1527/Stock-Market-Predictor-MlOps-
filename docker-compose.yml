@@ -1,0 +1,52 @@
+services:
+  db:
+    image: postgres:14
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=Stock_Predictor
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=Tha12345
+    ports:
+      - "5432:5432"
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: ./Stock-predictions-backend
+    volumes:
+      - ./Stock-predictions-backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=True
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,backend
+      - DATABASE_HOST=db
+      - DATABASE_NAME=Stock_Predictor
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD=Tha12345
+    depends_on:
+      - db
+    networks:
+      - app-network
+  
+  frontend:
+    build:
+      context: ./Stock-predictions-frontend
+    volumes:
+      - ./Stock-predictions-frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
