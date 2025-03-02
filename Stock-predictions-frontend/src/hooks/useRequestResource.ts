@@ -3,9 +3,7 @@ import axios from "axios";
 import useData from "../globalVariables/dataContext";
 
 // Use environment variables or determine the base URL dynamically
-const API_URL = import.meta.env.PROD
-  ? "https://stock-predictions-backend-production.up.railway.app/api"
-  : "/api";
+const API_URL = "http://localhost:8000/api";
 
 const client = axios.create({
   baseURL: API_URL
