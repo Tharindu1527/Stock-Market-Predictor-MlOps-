@@ -80,7 +80,7 @@ export default function ModelPerformance() {
     left: 30,
   };
 
-  // Train data line chart
+  // Train data line charts
   let startDay = startOfMonth(parseData!.at(0)!.date);
   let endDay = endOfMonth(parseData!.at(-1)!.date);
   let months = eachYearOfInterval({ start: startDay, end: endDay });

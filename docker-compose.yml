@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   db:
     image: postgres:14
@@ -11,10 +13,17 @@ services:
       - "5432:5432"
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   backend:
     build:
       context: ./Stock-predictions-backend
+      dockerfile: Dockerfile
+    image: stock-predictions-backend:latest
     volumes:
       - ./Stock-predictions-backend:/app
     ports:
@@ -27,13 +36,22 @@ services:
       - DATABASE_USER=postgres
       - DATABASE_PASSWORD=Tha12345
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
   
   frontend:
     build:
       context: ./Stock-predictions-frontend
+      dockerfile: Dockerfile
+    image: stock-predictions-frontend:latest
     volumes:
       - ./Stock-predictions-frontend:/app
       - /app/node_modules

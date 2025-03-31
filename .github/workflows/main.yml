@@ -1,0 +1,75 @@
+name: Stock Prediction App CI/CD
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install backend dependencies
+        run: |
+          cd Stock-predictions-backend
+          pip install -r requirements.txt
+      
+      - name: Run backend tests
+        run: |
+          cd Stock-predictions-backend
+          python manage.py test
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install frontend dependencies
+        run: |
+          cd Stock-predictions-frontend
+          npm install
+      
+      - name: Run frontend tests
+        run: |
+          cd Stock-predictions-frontend
+          npm test
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      - name: Build and push backend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./Stock-predictions-backend
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/stock-prediction-backend:latest
+      
+      - name: Build and push frontend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./Stock-predictions-frontend
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/stock-prediction-frontend:latest

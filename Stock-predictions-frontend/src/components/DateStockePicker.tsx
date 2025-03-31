@@ -19,7 +19,6 @@ import {
 } from "@mui/material";
 
 export default function DateStockePicker() {
-  // open Snack
   const [open, setOpen] = useState(false);
   //Global varialbes
   const { getResourceData } = useRequestResource();
