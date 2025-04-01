@@ -23,6 +23,12 @@ class ModelPerformanceTest(TestCase):
         """Test that we can train a model and it performs reasonably well"""
         self.logger.info("Starting model training and evaluation test")
         
+        import shutil
+        if os.path.exists("model_registry"):
+            self.logger.info("Clearing existing model registry")
+            shutil.rmtree("model_registry")
+        os.makedirs("model_registry", exist_ok=True)
+
         # Import the call_command function
         from django.core.management import call_command
         

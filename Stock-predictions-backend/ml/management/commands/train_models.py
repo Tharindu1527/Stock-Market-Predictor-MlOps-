@@ -51,6 +51,8 @@ class Command(BaseCommand):
         use_sample_data = options.get('use_sample_data')
         min_data_points = options.get('min_data_points', 120)
         
+        logger.info(f"Force flag is set to: {force}")
+
         # Override epochs if specified
         epochs = options.get('epochs')
         if epochs is not None:

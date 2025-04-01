@@ -164,13 +164,19 @@ jobs:
           MODEL_BATCH_SIZE: 32
         run: |
           cd Stock-predictions-backend
-          # Create test directories for model files if needed
-          mkdir -p model_registry
-          mkdir -p backtest_results
-          # Force train a model for testing
-          python manage.py train_models --stocks=AAPL --use-sample-data --force --epochs=1
-          # Then run the test
-          python manage.py test ml.tests.test_model_performance
+          python -c "
+          import os, shutil
+          if os.path.exists('model_registry'):
+              print('Clearing old model registry')
+              shutil.rmtree('model_registry')
+          os.makedirs('model_registry', exist_ok=True)
+          "
+              
+              # Directly run the command to train a model
+              python manage.py train_models --stocks=AAPL --use-sample-data --force --epochs=1
+              
+              # Then run the test
+              python manage.py test ml.tests.test_model_performance
 
       - name: Upload test artifacts
         if: always()
