@@ -55,47 +55,53 @@ jobs:
           cd Stock-predictions-backend
           python manage.py test
           
-      - name: Run ML model validation test
-        env:
-          DATABASE_NAME: Stock_Predictor
-          DATABASE_USER: postgres
-          DATABASE_PASSWORD: Tha12345
-          DATABASE_HOST: localhost
-          DATABASE_PORT: 5432
-        run: |
-          cd Stock-predictions-backend
-          # Create a test script to validate model
-          cat > ml/tests/test_model_performance.py << 'EOF'
-          from django.test import TestCase
-          from ml.model_registry import ModelRegistry
-          from ml.backtesting import ModelBacktester
-          import numpy as np
-          
-          class ModelPerformanceTest(TestCase):
-              def test_model_training_and_evaluation(self):
-                  """Test that we can train a model and it performs reasonably well"""
-                  # This will use synthetic data by default
-                  from django.core.management import call_command
-                  
-                  # Train a model for AAPL with synthetic data
-                  call_command('train_models', stocks='AAPL', use_sample_data=True, epochs=1)
-                  
-                  # Check that a model was created
-                  registry = ModelRegistry()
-                  models = registry.list_models(stock='AAPL')
-                  self.assertTrue(len(models) > 0, "No model was created")
-                  
-                  # Backtest the model
-                  backtester = ModelBacktester()
-                  report = backtester.backtest_stock('AAPL', use_sample_data=True)
-                  
-                  # Check that the model has reasonable performance
-                  self.assertIsNotNone(report, "Backtest failed to produce a report")
-                  self.assertLess(report['metrics']['rmse'], 50, "RMSE is too high")
-          EOF
-          
-          # Run the test
-          python manage.py test ml.tests.test_model_performance
+          - name: Run ML model validation test
+          env:
+            DATABASE_NAME: Stock_Predictor
+            DATABASE_USER: postgres
+            DATABASE_PASSWORD: Tha12345
+            DATABASE_HOST: localhost
+            DATABASE_PORT: 5432
+          run: |
+            cd Stock-predictions-backend
+            # Create the tests directory if it doesn't exist
+            mkdir -p ml/tests
+            
+            # Create an __init__.py file to make tests a proper Python package
+            touch ml/tests/__init__.py
+            
+            # Create a test script to validate model
+            cat > ml/tests/test_model_performance.py << 'EOF'
+            from django.test import TestCase
+            from ml.model_registry import ModelRegistry
+            from ml.backtesting import ModelBacktester
+            import numpy as np
+            
+            class ModelPerformanceTest(TestCase):
+                def test_model_training_and_evaluation(self):
+                    """Test that we can train a model and it performs reasonably well"""
+                    # This will use synthetic data by default
+                    from django.core.management import call_command
+                    
+                    # Train a model for AAPL with synthetic data
+                    call_command('train_models', stocks='AAPL', use_sample_data=True, epochs=1)
+                    
+                    # Check that a model was created
+                    registry = ModelRegistry()
+                    models = registry.list_models(stock='AAPL')
+                    self.assertTrue(len(models) > 0, "No model was created")
+                    
+                    # Backtest the model
+                    backtester = ModelBacktester()
+                    report = backtester.backtest_stock('AAPL', use_sample_data=True)
+                    
+                    # Check that the model has reasonable performance
+                    self.assertIsNotNone(report, "Backtest failed to produce a report")
+                    self.assertLess(report['metrics']['rmse'], 50, "RMSE is too high")
+            EOF
+            
+            # Run the test
+            python manage.py test ml.tests.test_model_performance
   
   build-and-push:
     needs: test
