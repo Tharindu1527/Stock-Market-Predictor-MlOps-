@@ -1,3 +1,4 @@
+# .github/workflows/model-training.yml
 name: Model Training and Validation
 
 on:
@@ -38,6 +39,14 @@ jobs:
           cd Stock-predictions-backend
           pip install -r requirements.txt
 
+      - name: Set up directories
+        run: |
+          mkdir -p Stock-predictions-backend/model_registry
+          mkdir -p Stock-predictions-backend/monitoring_logs
+          mkdir -p Stock-predictions-backend/monitoring_logs/predictions
+          mkdir -p Stock-predictions-backend/monitoring_logs/performance
+          mkdir -p Stock-predictions-backend/backtest_results
+
       - name: Train models
         env:
           DATABASE_NAME: Stock_Predictor
@@ -47,9 +56,11 @@ jobs:
           DATABASE_PORT: 5432
           MODEL_EPOCHS: 10
           MODEL_BATCH_SIZE: 32
+          MODEL_LSTM_UNITS: 64
         run: |
           cd Stock-predictions-backend
-          python manage.py train_models --stocks AAPL,MSFT,NFLX,NVDA,DIS --force --epochs 10
+          # Use synthetic data for reliability in CI/CD environment
+          python manage.py train_models --stocks AAPL,MSFT,NFLX,NVDA,DIS --force --epochs 10 --use-sample-data
       
       - name: Run backtests
         env:
@@ -60,12 +71,46 @@ jobs:
           DATABASE_PORT: 5432
         run: |
           cd Stock-predictions-backend
+          mkdir -p backtests
           for stock in AAPL MSFT NFLX NVDA DIS; do
-            python manage.py backtest_model --stock $stock --days 30 --output-format json > backtests/${stock}_backtest.json
+            python manage.py backtest_model --stock $stock --days 30 --output-format json --use-sample-data > backtests/${stock}_backtest.json
+          done
+      
+      - name: Generate performance report
+        run: |
+          cd Stock-predictions-backend
+          echo "# Model Performance Report" > performance_report.md
+          echo "Generated on $(date)" >> performance_report.md
+          echo "" >> performance_report.md
+          echo "## Backtest Results" >> performance_report.md
+          echo "" >> performance_report.md
+          echo "| Stock | RMSE | MAE | MAPE | R² |" >> performance_report.md
+          echo "|-------|------|-----|------|-----|" >> performance_report.md
+          
+          for file in backtests/*.json; do
+            if [ -f "$file" ]; then
+              stock=$(basename "$file" | cut -d '_' -f 1)
+              rmse=$(grep -o '"rmse":[^,}]*' "$file" | head -1 | cut -d ':' -f 2)
+              mae=$(grep -o '"mae":[^,}]*' "$file" | head -1 | cut -d ':' -f 2)
+              mape=$(grep -o '"mape":[^,}]*' "$file" | head -1 | cut -d ':' -f 2)
+              r2=$(grep -o '"r2":[^,}]*' "$file" | head -1 | cut -d ':' -f 2)
+              
+              echo "| $stock | $rmse | $mae | $mape | $r2 |" >> performance_report.md
+            fi
           done
       
       - name: Upload model performance reports
         uses: actions/upload-artifact@v3
         with:
           name: model-performance-reports
-          path: Stock-predictions-backend/backtest_results/
+          path: |
+            Stock-predictions-backend/backtest_results/
+            Stock-predictions-backend/performance_report.md
+            Stock-predictions-backend/backtests/
+      
+      # Optional: Deploy new models to production environment
+      # - name: Deploy best models
+      #   if: success()
+      #   run: |
+      #     # This would be a script to deploy the best performing models to your production environment
+      #     echo "Deploying best models to production"

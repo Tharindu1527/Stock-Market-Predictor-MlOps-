@@ -46,9 +46,14 @@ class ModelBacktester:
     
     def run_backtest(self, model, scaler, stock, test_period_days, model_id, use_sample_data=False):
         """Run the actual backtest"""
-        # Set up date range
+        # Set up date range - ensure enough data by providing extra days for window
+        window_size = 60  # Default window size if not in metadata
+        
+        # Add buffer for window size and some extra days
+        total_days_needed = test_period_days + window_size + 10
+        
         end_date = datetime.now()
-        start_date = end_date - timedelta(days=test_period_days + 60)  # Need 60 days of history for each prediction
+        start_date = end_date - timedelta(days=total_days_needed)
         
         # Try to get real data if not using sample data
         df = pd.DataFrame()
@@ -67,6 +72,7 @@ class ModelBacktester:
         # Generate sample data if needed
         if use_sample_data:
             print(f"Using synthetic data for backtesting {stock}")
+            # Generate more data than needed to ensure we have enough
             date_range = pd.date_range(start=start_date, end=end_date, freq='B')  # Business days
             
             # Generate synthetic stock data
@@ -91,6 +97,17 @@ class ModelBacktester:
             
             print(f"Created synthetic data with {len(df)} records")
         
+        # Ensure we have enough days for testing
+        if len(df) < window_size + 10:
+            print(f"Not enough data points for backtesting (need at least {window_size+10}, got {len(df)})")
+            return None
+        
+        # Adjust test period if necessary to ensure we have enough data
+        original_test_period = test_period_days
+        if len(df) < window_size + test_period_days:
+            test_period_days = max(5, len(df) - window_size - 5)  # Ensure at least 5 test days
+            print(f"Reduced test period from {original_test_period} to {test_period_days} days due to limited data")
+        
         # Prepare for predictions
         predictions = []
         actuals = []
@@ -98,14 +115,6 @@ class ModelBacktester:
         
         # We'll use a sliding window approach - test the model on each day
         # in the test period using data up to the previous day
-        window_size = 60  # Default window size if not in metadata
-        
-        # Ensure we have enough days
-        if len(df) < window_size + 10:
-            print(f"Not enough data points for backtesting (need at least {window_size+10}, got {len(df)})")
-            return None
-        
-        # Split the data
         test_start_idx = max(window_size, len(df) - test_period_days)
         
         for i in range(test_start_idx, len(df)):
@@ -194,6 +203,7 @@ class ModelBacktester:
             "stock": stock,
             "model_id": model_id,
             "test_period_days": test_period_days,
+            "actual_test_period_days": len(dates),
             "metrics": {
                 "rmse": rmse,
                 "mae": mae,

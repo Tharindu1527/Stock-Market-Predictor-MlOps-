@@ -1,52 +1,89 @@
-# Stock-predictions-backend/ml/management/commands/backtest_model.py
-from django.core.management.base import BaseCommand, CommandError
+# Stock-predictions-backend/ml/tests/test_model_performance.py
+from django.test import TestCase
+from ml.model_registry import ModelRegistry
 from ml.backtesting import ModelBacktester
-import json
+import numpy as np
+import os
+import logging
 
-class Command(BaseCommand):
-    help = 'Backtest a stock prediction model'
-
-    def add_arguments(self, parser):
-        parser.add_argument('--stock', type=str, help='Stock symbol to backtest')
-        parser.add_argument('--model-id', type=str, help='Specific model ID to backtest')
-        parser.add_argument('--days', type=int, default=30, help='Number of days to backtest')
-        parser.add_argument('--output-format', choices=['text', 'json'], default='text', 
-                            help='Output format (text or json)')
-        parser.add_argument('--use-sample-data', action='store_true', 
-                            help='Use synthetic data instead of real stock data')
-
-    def handle(self, *args, **options):
+class ModelPerformanceTest(TestCase):
+    def setUp(self):
+        # Set up directories
+        os.makedirs("model_registry", exist_ok=True)
+        os.makedirs("monitoring_logs", exist_ok=True)
+        os.makedirs("backtest_results", exist_ok=True)
+        
+        # Set up logging to capture any issues
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        self.logger = logging.getLogger("model_test")
+    
+    def test_model_training_and_evaluation(self):
+        """Test that we can train a model and it performs reasonably well"""
+        self.logger.info("Starting model training and evaluation test")
+        
+        # Import the call_command function
+        from django.core.management import call_command
+        
+        # Training with sample data and sufficient data points
+        # The key parameters are:
+        # - use_sample_data=True: Use synthetic data
+        # - days=150: Ensure enough historical data
+        # - min_data_points=150: Ensure minimum required data
+        # - epochs=1: Fast training for CI/CD
+        self.logger.info("Training model with sample data")
+        call_command(
+            'train_models', 
+            stocks='AAPL', 
+            use_sample_data=True, 
+            epochs=1, 
+            days=150,
+            min_data_points=150,
+            batch_size=32
+        )
+        
+        # Check that a model was created
+        registry = ModelRegistry()
+        models = registry.list_models(stock='AAPL')
+        self.assertTrue(len(models) > 0, "No model was created")
+        
+        # Get the latest model
+        latest_model = models[-1]
+        self.logger.info(f"Created model: {latest_model['model_id']}")
+        
+        # Backtest with shorter test period and sample data
         backtester = ModelBacktester()
+        self.logger.info("Running backtest with sample data")
+        report = backtester.backtest_stock(
+            'AAPL', 
+            test_period_days=15,  # Shorter test period
+            use_sample_data=True
+        )
         
-        stock = options.get('stock')
-        model_id = options.get('model_id')
-        days = options.get('days')
-        output_format = options.get('output_format')
-        use_sample_data = options.get('use_sample_data')
+        # Check results
+        self.assertIsNotNone(report, "Backtest failed to produce a report")
         
-        if not stock and not model_id:
-            raise CommandError("Either --stock or --model-id must be specified")
+        if report:
+            self.logger.info(f"Backtest metrics: RMSE={report['metrics']['rmse']:.4f}, MAE={report['metrics']['mae']:.4f}")
+            # Check reasonable performance (adjust threshold as needed)
+            self.assertLess(report['metrics']['rmse'], 50, "RMSE is too high")
+            
+            # Verify the report contains expected fields
+            required_fields = ['stock', 'model_id', 'metrics', 'results_file', 'plot_file']
+            for field in required_fields:
+                self.assertIn(field, report, f"Report missing required field: {field}")
+            
+            # Verify the files exist
+            self.assertTrue(os.path.exists(report['results_file']), "Results CSV file not created")
+            self.assertTrue(os.path.exists(report['plot_file']), "Plot file not created")
+            
+    def tearDown(self):
+        # Clean up test artifacts if needed
+        self.logger.info("Test complete, cleaning up test artifacts")
         
-        if model_id:
-            report = backtester.backtest_specific_model(model_id, days, use_sample_data)
-        else:
-            report = backtester.backtest_stock(stock, days, use_sample_data)
-        
-        if not report:
-            self.stderr.write(self.style.ERROR('Backtesting failed, see errors above.'))
-            return
-        
-        if output_format == 'json':
-            self.stdout.write(json.dumps(report, indent=2))
-        else:
-            self.stdout.write(self.style.SUCCESS(f"Backtest completed for {report['stock']}"))
-            self.stdout.write(f"Model: {report['model_id']}")
-            self.stdout.write(f"Period: {report['test_period_days']} days")
-            self.stdout.write("\nMetrics:")
-            self.stdout.write(f"  RMSE: {report['metrics']['rmse']:.4f}")
-            self.stdout.write(f"  MAE: {report['metrics']['mae']:.4f}")
-            self.stdout.write(f"  MAPE: {report['metrics']['mape']:.2f}%")
-            self.stdout.write(f"  R²: {report['metrics']['r2']:.4f}")
-            self.stdout.write("\nResults:")
-            self.stdout.write(f"  CSV: {report['results_file']}")
-            self.stdout.write(f"  Plot: {report['plot_file']}")
+        # Note: You might want to keep these for debugging in CI/CD
+        # But you can uncomment these lines to clean up
+        # import shutil
+        # shutil.rmtree("backtest_results", ignore_errors=True)

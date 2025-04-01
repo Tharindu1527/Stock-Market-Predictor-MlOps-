@@ -1,3 +1,4 @@
+# .github/workflows/frontend-pipeline.yml
 name: Frontend CI/CD Pipeline
 
 on:
@@ -10,6 +11,7 @@ on:
     branches: [main, master]
     paths:
       - 'Stock-predictions-frontend/**'
+  workflow_dispatch:  # Manual trigger
 
 jobs:
   test:

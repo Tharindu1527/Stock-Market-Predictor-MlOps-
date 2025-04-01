@@ -23,6 +23,8 @@ class Command(BaseCommand):
         parser.add_argument('--force', action='store_true', help='Force training even if recent model exists')
         parser.add_argument('--epochs', type=int, help='Override default epochs for training')
         parser.add_argument('--use-sample-data', action='store_true', help='Use generated sample data instead of real data')
+        parser.add_argument('--batch-size', type=int, help='Override batch size for training')
+        parser.add_argument('--min-data-points', type=int, default=120, help='Minimum number of data points required')
 
     def handle(self, *args, **options):
         # Setup logging
@@ -44,9 +46,10 @@ class Command(BaseCommand):
             # Use default stocks from config
             stocks = config.get('api.default_stocks', ['AAPL', 'MSFT', 'NFLX', 'NVDA', 'DIS'])
         
-        days = options.get('days')
+        days = options.get('days', 730)
         force = options.get('force')
         use_sample_data = options.get('use_sample_data')
+        min_data_points = options.get('min_data_points', 120)
         
         # Override epochs if specified
         epochs = options.get('epochs')
@@ -54,6 +57,13 @@ class Command(BaseCommand):
             training_epochs = epochs
         else:
             training_epochs = config.get('model.epochs', 1)
+            
+        # Override batch size if specified
+        batch_size = options.get('batch_size')
+        if batch_size is not None:
+            training_batch_size = batch_size
+        else:
+            training_batch_size = config.get('model.batch_size', 1)
         
         logger.info(f"Starting training for stocks: {', '.join(stocks)}")
         
@@ -62,6 +72,8 @@ class Command(BaseCommand):
         monitor = ModelMonitor()
         
         # Train models for each stock
+        trained_models = []
+        
         for stock in stocks:
             try:
                 # Check if we already have a recent model
@@ -113,8 +125,9 @@ class Command(BaseCommand):
                     else:
                         logger.warning(f"No data available for {stock}, falling back to sample data")
                     
-                    # Generate synthetic data for training
-                    date_range = pd.date_range(start=start_date, end=end_date, freq='B')  # Business days
+                    # Generate synthetic data for training - ensure sufficient data points
+                    num_days = max(days, min_data_points)
+                    date_range = pd.date_range(start=end_date - timedelta(days=num_days), end=end_date, freq='B')  # Business days
                     
                     # Generate synthetic stock data
                     np.random.seed(hash(stock) % 10000)  # Use stock name for reproducible randomness
@@ -139,6 +152,43 @@ class Command(BaseCommand):
                     logger.info(f"Created synthetic data with {len(df)} records")
                 else:
                     logger.info(f"Downloaded {len(df)} days of data")
+                
+                # Ensure we have enough data points
+                if len(df) < min_data_points:
+                    logger.warning(f"Not enough data points for {stock}. Got {len(df)}, need at least {min_data_points}. Generating more synthetic data.")
+                    
+                    # Add more synthetic data to reach minimum required
+                    num_additional_days = min_data_points - len(df)
+                    start_date_additional = df.index[0] - timedelta(days=num_additional_days * 1.5)  # Add extra buffer for weekends
+                    
+                    date_range_additional = pd.date_range(start=start_date_additional, end=df.index[0] - timedelta(days=1), freq='B')
+                    
+                    if len(date_range_additional) > 0:
+                        # Get initial price close to the first real price
+                        if df.empty:
+                            initial_price_additional = 100 + hash(stock) % 900
+                        else:
+                            initial_price_additional = df['Close'].iloc[0] * 0.95  # Slightly lower than first real price
+                        
+                        prices_additional = [initial_price_additional]
+                        
+                        for i in range(1, len(date_range_additional)):
+                            change = np.random.normal(0.0005, 0.015)
+                            prices_additional.append(prices_additional[-1] * (1 + change))
+                        
+                        # Create DataFrame with additional synthetic data
+                        df_additional = pd.DataFrame({
+                            'Open': prices_additional,
+                            'High': [p * (1 + abs(np.random.normal(0, 0.005))) for p in prices_additional],
+                            'Low': [p * (1 - abs(np.random.normal(0, 0.005))) for p in prices_additional],
+                            'Close': prices_additional,
+                            'Adj Close': prices_additional,
+                            'Volume': [int(np.random.normal(1000000, 300000)) for _ in prices_additional]
+                        }, index=date_range_additional)
+                        
+                        # Combine datasets
+                        df = pd.concat([df_additional, df])
+                        logger.info(f"Added {len(df_additional)} synthetic data points. Total records: {len(df)}")
                 
                 # Prepare data
                 data = df['Close'].values.reshape(-1, 1)
@@ -206,7 +256,7 @@ class Command(BaseCommand):
                 model.fit(
                     x_train, 
                     y_train, 
-                    batch_size=config.get('model.batch_size', 1),
+                    batch_size=training_batch_size,
                     epochs=training_epochs,
                     verbose=1
                 )
@@ -254,6 +304,7 @@ class Command(BaseCommand):
                         'training_data_len': training_data_len,
                         'window_size': window_size,
                         'epochs': training_epochs,
+                        'batch_size': training_batch_size,
                         'rmse': float(rmse),
                         'mae': float(mae),
                         'training_time': training_time,
@@ -261,11 +312,13 @@ class Command(BaseCommand):
                             'rmse': float(rmse),
                             'mae': float(mae)
                         },
-                        'is_sample_data': use_sample_data or df.empty
+                        'is_sample_data': use_sample_data or df.empty,
+                        'data_points': len(df)
                     }
                 )
                 
                 logger.info(f"Model {model_id} saved to registry")
+                trained_models.append(model_id)
                 
                 # Log model performance
                 monitor.log_model_performance(
@@ -286,3 +339,4 @@ class Command(BaseCommand):
                 continue
         
         logger.info("Training complete")
+        return trained_models  # Return model IDs for testing purposes
