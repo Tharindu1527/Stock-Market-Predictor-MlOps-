@@ -1,4 +1,3 @@
-# docker-compose.yml
 version: '3.8'
 
 services:
@@ -27,9 +26,6 @@ services:
     image: stock-predictions-backend:latest
     volumes:
       - ./Stock-predictions-backend:/app
-      - model_registry:/app/model_registry
-      - monitoring_logs:/app/monitoring_logs
-      - backtest_results:/app/backtest_results
     ports:
       - "8000:8000"
     environment:
@@ -39,23 +35,17 @@ services:
       - DATABASE_NAME=Stock_Predictor
       - DATABASE_USER=postgres
       - DATABASE_PASSWORD=Tha12345
-      - MODEL_EPOCHS=5
-      - MODEL_BATCH_SIZE=32
-      - MODEL_LSTM_UNITS=64
-      - MONITORING_ENABLED=true
-      - REGISTRY_ENABLED=true
-      - API_DEFAULT_STOCKS=AAPL,MSFT,NFLX,NVDA,DIS
     depends_on:
       db:
         condition: service_healthy
     networks:
       - app-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/"]
+      interval: 10s
+      timeout: 5s
       retries: 3
-      start_period: 40s
+      start_period: 15s
   
   frontend:
     build:
@@ -71,47 +61,6 @@ services:
       - backend
     networks:
       - app-network
-  
-  # New service for scheduled model training
-  model-trainer:
-    build:
-      context: ./Stock-predictions-backend
-      dockerfile: Dockerfile
-    image: stock-predictions-backend:latest
-    volumes:
-      - ./Stock-predictions-backend:/app
-      - model_registry:/app/model_registry
-      - monitoring_logs:/app/monitoring_logs
-      - backtest_results:/app/backtest_results
-    command: >
-      bash -c "
-        echo 'Waiting for backend to become healthy...' &&
-        sleep 60 &&
-        python manage.py train_models --epochs 10 --use-sample-data &&
-        echo 'Model training complete. Running backtests...' &&
-        python manage.py backtest_model --stock AAPL --use-sample-data &&
-        python manage.py backtest_model --stock MSFT --use-sample-data &&
-        echo 'Backtesting complete.'
-      "
-    environment:
-      - DATABASE_HOST=db
-      - DATABASE_NAME=Stock_Predictor
-      - DATABASE_USER=postgres
-      - DATABASE_PASSWORD=Tha12345
-      - MODEL_EPOCHS=10
-      - MODEL_BATCH_SIZE=32
-      - MODEL_LSTM_UNITS=64
-      - MONITORING_ENABLED=true
-      - REGISTRY_ENABLED=true
-    depends_on:
-      - backend
-      - db
-    networks:
-      - app-network
-    deploy:
-      restart_policy:
-        condition: on-failure
-        max_attempts: 3
 
 networks:
   app-network:
@@ -119,6 +68,3 @@ networks:
 
 volumes:
   postgres_data:
-  model_registry:
-  monitoring_logs:
-  backtest_results:
