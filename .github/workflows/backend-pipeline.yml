@@ -59,6 +59,8 @@ jobs:
       - name: Create test for model performance
         run: |
           cd Stock-predictions-backend
+          mkdir -p ml/tests
+          touch ml/tests/__init__.py  # Ensure this exists
           cat > ml/tests/test_model_performance.py << 'EOF'
           from django.test import TestCase
           from ml.model_registry import ModelRegistry
@@ -94,7 +96,6 @@ jobs:
                       'train_models', 
                       stocks='AAPL', 
                       use_sample_data=True, 
-                      force=True,  # Force training even if a recent model exists
                       epochs=1, 
                       days=150,
                       min_data_points=150,
@@ -163,15 +164,17 @@ jobs:
           MODEL_BATCH_SIZE: 32
         run: |
           cd Stock-predictions-backend
-          # Ensure model registry directory exists
+          # Create test directories for model files if needed
           mkdir -p model_registry
           mkdir -p backtest_results
-          # Run the tests
+          # Force train a model for testing
+          python manage.py train_models --stocks=AAPL --use-sample-data --force --epochs=1
+          # Then run the test
           python manage.py test ml.tests.test_model_performance
 
       - name: Upload test artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: test-artifacts
           path: |
@@ -214,7 +217,7 @@ jobs:
           echo "Deployment tag: ${{ env.DEPLOYMENT_TAG }}" >> deployment/backend-image.txt
       
       - name: Upload deployment artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: backend-deployment-info
           path: deployment/
