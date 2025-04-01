@@ -166,7 +166,7 @@ jobs:
 
       - name: Upload test artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: test-artifacts
           path: |
@@ -209,7 +209,7 @@ jobs:
           echo "Deployment tag: ${{ env.DEPLOYMENT_TAG }}" >> deployment/backend-image.txt
       
       - name: Upload deployment artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: backend-deployment-info
           path: deployment/
