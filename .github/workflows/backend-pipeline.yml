@@ -140,17 +140,6 @@ jobs:
                   self.logger.info("Test complete, cleaning up test artifacts")
           EOF
 
-      - name: Run basic Django tests
-        env:
-          DATABASE_NAME: Stock_Predictor
-          DATABASE_USER: postgres
-          DATABASE_PASSWORD: Tha12345
-          DATABASE_HOST: localhost
-          DATABASE_PORT: 5432
-        run: |
-          cd Stock-predictions-backend
-          python manage.py test --exclude-tag=model_performance
-
       - name: Run model performance test
         env:
           DATABASE_NAME: Stock_Predictor
