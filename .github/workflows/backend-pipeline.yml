@@ -1,0 +1,140 @@
+name: Backend CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'Stock-predictions-backend/**'
+      - '.github/workflows/backend-pipeline.yml'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'Stock-predictions-backend/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_DB: Stock_Predictor
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: Tha12345
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install backend dependencies
+        run: |
+          cd Stock-predictions-backend
+          pip install -r requirements.txt
+
+      - name: Run backend tests
+        env:
+          DATABASE_NAME: Stock_Predictor
+          DATABASE_USER: postgres
+          DATABASE_PASSWORD: Tha12345
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+        run: |
+          cd Stock-predictions-backend
+          python manage.py test
+          
+      - name: Run ML model validation test
+        env:
+          DATABASE_NAME: Stock_Predictor
+          DATABASE_USER: postgres
+          DATABASE_PASSWORD: Tha12345
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+        run: |
+          cd Stock-predictions-backend
+          # Create a test script to validate model
+          cat > ml/tests/test_model_performance.py << 'EOF'
+          from django.test import TestCase
+          from ml.model_registry import ModelRegistry
+          from ml.backtesting import ModelBacktester
+          import numpy as np
+          
+          class ModelPerformanceTest(TestCase):
+              def test_model_training_and_evaluation(self):
+                  """Test that we can train a model and it performs reasonably well"""
+                  # This will use synthetic data by default
+                  from django.core.management import call_command
+                  
+                  # Train a model for AAPL with synthetic data
+                  call_command('train_models', stocks='AAPL', use_sample_data=True, epochs=1)
+                  
+                  # Check that a model was created
+                  registry = ModelRegistry()
+                  models = registry.list_models(stock='AAPL')
+                  self.assertTrue(len(models) > 0, "No model was created")
+                  
+                  # Backtest the model
+                  backtester = ModelBacktester()
+                  report = backtester.backtest_stock('AAPL', use_sample_data=True)
+                  
+                  # Check that the model has reasonable performance
+                  self.assertIsNotNone(report, "Backtest failed to produce a report")
+                  self.assertLess(report['metrics']['rmse'], 50, "RMSE is too high")
+          EOF
+          
+          # Run the test
+          python manage.py test ml.tests.test_model_performance
+  
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      - name: Build and push backend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./Stock-predictions-backend
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/stock-prediction-backend:latest,${{ secrets.DOCKER_USERNAME }}/stock-prediction-backend:${{ github.sha }}
+      
+      - name: Create deployment tag
+        run: |
+          echo "DEPLOYMENT_TAG=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_ENV
+      
+      - name: Create deployment artifact
+        run: |
+          mkdir -p deployment
+          echo "Backend image: ${{ secrets.DOCKER_USERNAME }}/stock-prediction-backend:${{ github.sha }}" > deployment/backend-image.txt
+          echo "Deployment tag: ${{ env.DEPLOYMENT_TAG }}" >> deployment/backend-image.txt
+      
+      - name: Upload deployment artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-deployment-info
+          path: deployment/
+  
+  # Add deployment job as needed for your hosting environment

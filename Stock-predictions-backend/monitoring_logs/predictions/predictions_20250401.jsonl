@@ -1,0 +1,2 @@
+{"timestamp": "2025-04-01T16:16:31.245704", "stock": null, "model_id": "None_20250401_161631", "prediction_value": 128.31021118164062, "actual_value": null, "execution_time_ms": 10312.590837478638, "error": null}
+{"timestamp": "2025-04-01T16:18:34.693926", "stock": "NFLX", "model_id": "NFLX_20250401_161834", "prediction_value": 124.74313354492188, "actual_value": null, "execution_time_ms": 8561.685800552368, "error": null}

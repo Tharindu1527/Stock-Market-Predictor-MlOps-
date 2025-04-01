@@ -1,0 +1,77 @@
+name: Frontend CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'Stock-predictions-frontend/**'
+      - '.github/workflows/frontend-pipeline.yml'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'Stock-predictions-frontend/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './Stock-predictions-frontend/package-lock.json'
+      
+      - name: Install frontend dependencies
+        run: |
+          cd Stock-predictions-frontend
+          npm ci
+      
+      - name: Run frontend tests
+        run: |
+          cd Stock-predictions-frontend
+          npm test
+  
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      - name: Build and push frontend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./Stock-predictions-frontend
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/stock-prediction-frontend:latest,${{ secrets.DOCKER_USERNAME }}/stock-prediction-frontend:${{ github.sha }}
+      
+      - name: Create deployment tag
+        run: |
+          echo "DEPLOYMENT_TAG=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_ENV
+      
+      - name: Create deployment artifact
+        run: |
+          mkdir -p deployment
+          echo "Frontend image: ${{ secrets.DOCKER_USERNAME }}/stock-prediction-frontend:${{ github.sha }}" > deployment/frontend-image.txt
+          echo "Deployment tag: ${{ env.DEPLOYMENT_TAG }}" >> deployment/frontend-image.txt
+      
+      - name: Upload deployment artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-deployment-info
+          path: deployment/

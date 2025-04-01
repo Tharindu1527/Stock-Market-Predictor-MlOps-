@@ -1,0 +1,71 @@
+name: Model Training and Validation
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'  # Run every Monday at midnight
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  train-models:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_DB: Stock_Predictor
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: Tha12345
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          cd Stock-predictions-backend
+          pip install -r requirements.txt
+
+      - name: Train models
+        env:
+          DATABASE_NAME: Stock_Predictor
+          DATABASE_USER: postgres
+          DATABASE_PASSWORD: Tha12345
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+          MODEL_EPOCHS: 10
+          MODEL_BATCH_SIZE: 32
+        run: |
+          cd Stock-predictions-backend
+          python manage.py train_models --stocks AAPL,MSFT,NFLX,NVDA,DIS --force --epochs 10
+      
+      - name: Run backtests
+        env:
+          DATABASE_NAME: Stock_Predictor
+          DATABASE_USER: postgres
+          DATABASE_PASSWORD: Tha12345
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+        run: |
+          cd Stock-predictions-backend
+          for stock in AAPL MSFT NFLX NVDA DIS; do
+            python manage.py backtest_model --stock $stock --days 30 --output-format json > backtests/${stock}_backtest.json
+          done
+      
+      - name: Upload model performance reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: model-performance-reports
+          path: Stock-predictions-backend/backtest_results/
