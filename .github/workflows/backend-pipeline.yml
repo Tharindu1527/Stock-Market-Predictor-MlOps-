@@ -59,6 +59,8 @@ jobs:
       - name: Create test for model performance
         run: |
           cd Stock-predictions-backend
+          mkdir -p ml/tests
+          touch ml/tests/__init__.py  # Ensure this exists
           cat > ml/tests/test_model_performance.py << 'EOF'
           from django.test import TestCase
           from ml.model_registry import ModelRegistry
