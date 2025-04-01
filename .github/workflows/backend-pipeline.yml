@@ -55,14 +55,14 @@ jobs:
           cd Stock-predictions-backend
           python manage.py test
           
-          - name: Run ML model validation test
-          env:
+      - name: Run ML model validation test
+        env:
             DATABASE_NAME: Stock_Predictor
             DATABASE_USER: postgres
             DATABASE_PASSWORD: Tha12345
             DATABASE_HOST: localhost
             DATABASE_PORT: 5432
-          run: |
+        run: |
             cd Stock-predictions-backend
             # Create the tests directory if it doesn't exist
             mkdir -p ml/tests
