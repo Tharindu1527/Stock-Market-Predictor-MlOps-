@@ -97,6 +97,7 @@ class ModelRegistry:
         # Find the model directory
         model_dir = os.path.join(self.registry_dir, model_id)
         if not os.path.exists(model_dir):
+            print(f"Model directory not found: {model_dir}")
             return None, None, None
         
         # Load metadata
@@ -111,6 +112,10 @@ class ModelRegistry:
         # Load model
         try:
             model_path = metadata.get("model_path", os.path.join(model_dir, "model.h5"))
+            if not os.path.exists(model_path):
+                print(f"Error loading model from {model_path}: No file or directory found at {model_path}")
+                return None, None, None
+                
             if os.path.isdir(model_path):
                 # This is a SavedModel directory
                 model = tf.keras.models.load_model(model_path)
@@ -124,6 +129,10 @@ class ModelRegistry:
         # Load scaler
         try:
             scaler_path = metadata.get("scaler_path", os.path.join(model_dir, "scaler.pkl"))
+            if not os.path.exists(scaler_path):
+                print(f"Error loading scaler from {scaler_path}: No file or directory found")
+                return None, None, None
+                
             with open(scaler_path, 'rb') as f:
                 scaler = pickle.load(f)
         except Exception as e:

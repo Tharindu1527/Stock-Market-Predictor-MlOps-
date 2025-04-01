@@ -47,7 +47,7 @@ class Command(BaseCommand):
             stocks = config.get('api.default_stocks', ['AAPL', 'MSFT', 'NFLX', 'NVDA', 'DIS'])
         
         days = options.get('days', 730)
-        force = options.get('force')
+        force = options.get('force', False)
         use_sample_data = options.get('use_sample_data')
         min_data_points = options.get('min_data_points', 120)
         
